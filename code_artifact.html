@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>今天吃什麼？美食隨機決策器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 圖示 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti 慶祝特效 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            min-height: 100vh;
+        }
+        .wheel-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+        }
+        @media (min-width: 640px) {
+            .wheel-container {
+                width: 380px;
+                height: 380px;
+            }
+        }
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            transition: transform 4s cubic-bezier(0.15, 0.99, 0.18, 1);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 18px solid transparent;
+            border-right: 18px solid transparent;
+            border-top: 30px solid #ef4444;
+            z-index: 20;
+            filter: drop-shadow(0 4px 3px rgba(0,0,0,0.3));
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between p-4 md:p-8 text-gray-800">
+
+    <!-- 主容器 -->
+    <div class="max-w-4xl w-full bg-white/90 backdrop-blur-md rounded-3xl shadow-2xl p-6 md:p-8 my-auto">
+        
+        <!-- 標題區 -->
+        <header class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-black text-amber-600 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-utensils"></i> 今天吃什麼？
+            </h1>
+            <p class="text-gray-600 mt-2 font-medium">告別選擇困難症！讓幸運轉盤幫你做決定</p>
+        </header>
+
+        <!-- 情境切換標籤 -->
+        <div class="flex flex-wrap justify-center gap-2 mb-8" id="preset-buttons">
+            <button onclick="loadPreset('all')" class="preset-btn px-4 py-2 rounded-full font-bold text-sm bg-amber-500 text-white shadow-md hover:bg-amber-600 transition">
+                🌟 全部綜合
+            </button>
+            <button onclick="loadPreset('street')" class="preset-btn px-4 py-2 rounded-full font-bold text-sm bg-gray-100 text-gray-700 hover:bg-amber-100 transition">
+                🍜 平價小吃
+            </button>
+            <button onclick="loadPreset('fast')" class="preset-btn px-4 py-2 rounded-full font-bold text-sm bg-gray-100 text-gray-700 hover:bg-amber-100 transition">
+                🍔 快速便利
+            </button>
+            <button onclick="loadPreset('fancy')" class="preset-btn px-4 py-2 rounded-full font-bold text-sm bg-gray-100 text-gray-700 hover:bg-amber-100 transition">
+                🥩 豪華大餐
+            </button>
+            <button onclick="loadPreset('healthy')" class="preset-btn px-4 py-2 rounded-full font-bold text-sm bg-gray-100 text-gray-700 hover:bg-amber-100 transition">
+                🥗 健康輕食
+            </button>
+        </div>
+
+        <!-- 主要互動區：轉盤與管理選單 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+            
+            <!-- 轉盤區域 -->
+            <div class="flex flex-col items-center justify-center">
+                <div class="wheel-container mb-6">
+                    <div class="pointer"></div>
+                    <canvas id="wheel" width="400" height="400"></canvas>
+                </div>
+                <button id="spin-btn" onclick="spinWheel()" class="w-full max-w-xs py-4 bg-gradient-to-r from-red-500 to-amber-500 text-white font-extrabold text-xl rounded-2xl shadow-lg hover:opacity-95 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-arrows-spin"></i> 開始抽籤！
+                </button>
+            </div>
+
+            <!-- 選項管理區域 -->
+            <div class="bg-amber-50/60 rounded-2xl p-5 border border-amber-200 flex flex-col h-full justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold text-amber-900 flex items-center gap-2">
+                            <i class="fa-solid fa-list-check"></i> 美食候選清單
+                        </h2>
+                        <span id="item-count" class="text-xs bg-amber-200 text-amber-800 font-bold px-2.5 py-1 rounded-full">8 個選項</span>
+                    </div>
+
+                    <!-- 新增選項輸入框 -->
+                    <form onsubmit="addFood(event)" class="flex gap-2 mb-4">
+                        <input type="text" id="food-input" placeholder="新增想吃的類別或店家..." class="flex-1 px-4 py-2.5 rounded-xl border border-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm">
+                        <button type="submit" class="bg-amber-500 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-amber-600 transition flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> 新增
+                        </button>
+                    </form>
+
+                    <!-- 選項列表 -->
+                    <div id="food-list" class="max-h-60 overflow-y-auto pr-1 space-y-2 mb-4">
+                        <!-- 動態插入美食卡片 -->
+                    </div>
+                </div>
+
+                <!-- 底部重置按鈕 -->
+                <div class="pt-2 border-t border-amber-200/60 flex justify-between items-center text-xs text-gray-500">
+                    <span>💡 修改後自動儲存</span>
+                    <button onclick="resetToDefault()" class="text-red-500 hover:text-red-700 font-medium underline">
+                        重置為預設清單
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 結果彈窗 Modal -->
+    <div id="result-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full text-center shadow-2xl transform scale-90 transition-transform duration-300" id="modal-content">
+            <div class="text-5xl mb-3">🎉</div>
+            <h3 class="text-gray-500 font-bold text-sm mb-1">今天決定吃...</h3>
+            <div id="result-text" class="text-3xl font-black text-amber-600 my-4 py-2 border-y-2 border-amber-100">
+                牛肉麵
+            </div>
+            
+            <div class="flex flex-col gap-2 mt-6">
+                <a id="google-map-btn" href="#" target="_blank" class="w-full py-3 bg-blue-500 text-white font-bold rounded-xl shadow-md hover:bg-blue-600 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-location-dot"></i> 搜尋附近的餐廳
+                </a>
+                <button onclick="closeModal()" class="w-full py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition">
+                    再抽一次
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 預設選單資料庫
+        const presets = {
+            all: ["牛肉麵", "火鍋", "拉麵", "便當", "麥當勞", "義大利麵", "壽司", "健康餐"],
+            street: ["牛肉麵", "滷肉飯", "乾麵小吃", "鹹酥雞", "蚵仔煎", "肉圓", "水餃"],
+            fast: ["麥當勞", "肯德基", "摩斯漢堡", "便利商店", "Subway", "吉野家"],
+            fancy: ["牛排", "日式燒肉", "麻辣火鍋", "義大利麵", "韓式燒肉", "精緻壽司"],
+            healthy: ["水煮健康餐", "溫沙拉", "越南河粉", "日式定食", "隨意素食"]
+        };
+
+        // 色彩盤（繽紛色系）
+        const colors = [
+            '#f87171', '#fb923c', '#fbbf24', '#a3e635', 
+            '#34d399', '#22d3ee', '#818cf8', '#c084fc'
+        ];
+
+        let currentFoods = [];
+        let isSpinning = false;
+        let currentRotation = 0;
+
+        // 初始化
+        window.onload = function() {
+            const savedFoods = localStorage.getItem('whatToEat_foods');
+            if (savedFoods) {
+                currentFoods = JSON.parse(savedFoods);
+            } else {
+                currentFoods = [...presets.all];
+            }
+            updateUI();
+        };
+
+        // 更新視覺與介面
+        function updateUI() {
+            renderList();
+            drawWheel();
+            document.getElementById('item-count').innerText = `${currentFoods.length} 個選項`;
+            localStorage.setItem('whatToEat_foods', JSON.stringify(currentFoods));
+        }
+
+        // 渲染轉盤
+        function drawWheel() {
+            const canvas = document.getElementById('wheel');
+            const ctx = canvas.getContext('2d');
+            const numOptions = currentFoods.length;
+            const arcSize = (2 * Math.PI) / numOptions;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (numOptions === 0) {
+                ctx.fillStyle = '#e5e7eb';
+                ctx.beginPath();
+                ctx.arc(200, 200, 190, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.fillStyle = '#9ca3af';
+                ctx.font = 'bold 20px "Noto Sans TC"';
+                ctx.textAlign = 'center';
+                ctx.fillText('請新增美食選項', 200, 205);
+                return;
+            }
+
+            for (let i = 0; i < numOptions; i++) {
+                const angle = i * arcSize;
+                
+                // 畫扇形
+                ctx.beginPath();
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.moveTo(200, 200);
+                ctx.arc(200, 200, 190, angle, angle + arcSize);
+                ctx.lineTo(200, 200);
+                ctx.fill();
+
+                // 畫外框邊線
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // 繪製文字
+                ctx.save();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 16px "Noto Sans TC"';
+                ctx.shadowColor = 'rgba(0,0,0,0.4)';
+                ctx.shadowBlur = 4;
+                
+                ctx.translate(200, 200);
+                ctx.rotate(angle + arcSize / 2);
+                ctx.textAlign = 'right';
+                ctx.fillText(currentFoods[i], 160, 6);
+                ctx.restore();
+            }
+
+            // 畫中心圓鈕
+            ctx.beginPath();
+            ctx.fillStyle = '#ffffff';
+            ctx.arc(200, 200, 30, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+        }
+
+        // 渲染選單清單
+        function renderList() {
+            const listEl = document.getElementById('food-list');
+            listEl.innerHTML = '';
+
+            currentFoods.forEach((food, index) => {
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center bg-white px-3.5 py-2 rounded-xl shadow-sm border border-amber-100 hover:border-amber-300 transition';
+                item.innerHTML = `
+                    <span class="font-medium text-gray-700 text-sm flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full inline-block" style="background-color: ${colors[index % colors.length]}"></span>
+                        ${food}
+                    </span>
+                    <button onclick="removeFood(${index})" class="text-gray-400 hover:text-red-500 transition p-1">
+                        <i class="fa-solid fa-trash-can text-sm"></i>
+                    </button>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        // 旋轉轉盤抽籤
+        function spinWheel() {
+            if (isSpinning) return;
+            if (currentFoods.length < 2) {
+                alert('請至少填寫 2 個美食選項才能開始抽籤喔！');
+                return;
+            }
+
+            isSpinning = true;
+            document.getElementById('spin-btn').disabled = true;
+
+            const wheel = document.getElementById('wheel');
+            const numOptions = currentFoods.length;
+            
+            // 隨機選一個索引
+            const selectedIndex = Math.floor(Math.random() * numOptions);
+            
+            // 計算角度（加強旋轉圈數，使其轉 5~8 圈）
+            const degreesPerSegment = 360 / numOptions;
+            // 指針在上方(270度/90度對齊計算)
+            const targetSegmentCenter = (selectedIndex * degreesPerSegment) + (degreesPerSegment / 2);
+            const extraRounds = (5 + Math.floor(Math.random() * 3)) * 360;
+            
+            // 指針指向頂端，轉盤需順時針轉到對應扇形
+            const rotationDegree = extraRounds + (270 - targetSegmentCenter);
+
+            currentRotation += rotationDegree;
+            wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+            // 動畫結束後彈出結果
+            setTimeout(() => {
+                showResult(currentFoods[selectedIndex]);
+                isSpinning = false;
+                document.getElementById('spin-btn').disabled = false;
+            }, 4000);
+        }
+
+        // 顯示結果 modal
+        function showResult(foodName) {
+            // 放彩帶特效
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+
+            document.getElementById('result-text').innerText = foodName;
+            
+            // 設定 Google Map 搜尋連結
+            const mapBtn = document.getElementById('google-map-btn');
+            mapBtn.href = `https://www.google.com/maps/search/${encodeURIComponent(foodName)}`;
+
+            const modal = document.getElementById('result-modal');
+            const modalContent = document.getElementById('modal-content');
+            
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-90');
+                modalContent.classList.add('scale-100');
+            }, 10);
+        }
+
+        // 關閉結果 Modal
+        function closeModal() {
+            const modal = document.getElementById('result-modal');
+            const modalContent = document.getElementById('modal-content');
+
+            modal.classList.add('opacity-0');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-90');
+
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        // 新增美食
+        function addFood(e) {
+            e.preventDefault();
+            const input = document.getElementById('food-input');
+            const value = input.value.trim();
+            
+            if (value) {
+                currentFoods.push(value);
+                input.value = '';
+                updateUI();
+            }
+        }
+
+        // 刪除美食
+        function removeFood(index) {
+            currentFoods.splice(index, 1);
+            updateUI();
+        }
+
+        // 載入預設分類
+        function loadPreset(type) {
+            if (presets[type]) {
+                currentFoods = [...presets[type]];
+                updateUI();
+
+                // 更新按鈕樣式
+                const buttons = document.querySelectorAll('.preset-btn');
+                buttons.forEach(btn => {
+                    btn.classList.remove('bg-amber-500', 'text-white');
+                    btn.classList.add('bg-gray-100', 'text-gray-700');
+                });
+                event.target.classList.remove('bg-gray-100', 'text-gray-700');
+                event.target.classList.add('bg-amber-500', 'text-white');
+            }
+        }
+
+        // 重置清單
+        function resetToDefault() {
+            if (confirm('確定要恢復預設美食清單嗎？')) {
+                currentFoods = [...presets.all];
+                updateUI();
+            }
+        }
+    </script>
+</body>
+</html>
